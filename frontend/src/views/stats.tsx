@@ -7,24 +7,7 @@ import type { HistoryFileInfo } from "../types";
 import { normalizeError } from "../utils";
 import { formatDuration } from "./history/helpers";
 
-const MS_WEEK = 7 * 86400 * 1000;
-
-function weekStartMs(epochMs: number): number {
-    const d = new Date(epochMs);
-    const dow = (d.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
-    return (
-        epochMs -
-        dow * 86400000 -
-        (d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds()) * 1000 -
-        d.getUTCMilliseconds()
-    );
-}
-
-interface WeekBucket {
-    startMs: number;
-    label: string;
-    area: number;
-}
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 interface StatsData {
     totalCleans: number;
@@ -32,7 +15,8 @@ interface StatsData {
     totalDistance: number;
     totalDuration: number;
     avgBatteryUsed: number | null;
-    weekly: WeekBucket[];
+    availableYears: number[];
+    monthlyByYear: Record<number, number[]>;
     modeCounts: { house: number; spot: number; manual: number };
 }
 
@@ -45,6 +29,7 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
     let batterySum = 0;
     let batteryCount = 0;
     const modeCounts = { house: 0, spot: 0, manual: 0 };
+    const monthlyByYear: Record<number, number[]> = {};
 
     for (const f of finished) {
         if (!f.summary) continue;
@@ -61,27 +46,19 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
         if (mode === "house") modeCounts.house++;
         else if (mode === "spot") modeCounts.spot++;
         else modeCounts.manual++;
+
+        if (f.session) {
+            const d = new Date(f.session.time * 1000);
+            const year = d.getUTCFullYear();
+            const month = d.getUTCMonth();
+            if (!monthlyByYear[year]) monthlyByYear[year] = Array(12).fill(0);
+            monthlyByYear[year][month] += s.areaCovered;
+        }
     }
 
-    const thisWeek = weekStartMs(Date.now());
-    const sessionsWithTime = finished.filter((f) => f.session);
-    const oldestWeek =
-        sessionsWithTime.length > 0
-            ? weekStartMs(Math.min(...sessionsWithTime.map((f) => f.session!.time * 1000)))
-            : thisWeek;
-    const numWeeks = Math.max(1, Math.round((thisWeek - oldestWeek) / MS_WEEK) + 1);
-    const weekly: WeekBucket[] = Array.from({ length: numWeeks }, (_, i) => {
-        const startMs = thisWeek - (numWeeks - 1 - i) * MS_WEEK;
-        const d = new Date(startMs);
-        return { startMs, label: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`, area: 0 };
-    });
-
-    for (const f of finished) {
-        if (!f.session || !f.summary) continue;
-        const ws = weekStartMs(f.session.time * 1000);
-        const b = weekly.find((w) => w.startMs === ws);
-        if (b) b.area += f.summary.areaCovered;
-    }
+    const availableYears = Object.keys(monthlyByYear)
+        .map(Number)
+        .sort((a, b) => b - a);
 
     return {
         totalCleans: finished.length,
@@ -89,7 +66,8 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
         totalDistance,
         totalDuration,
         avgBatteryUsed: batteryCount > 0 ? batterySum / batteryCount : null,
-        weekly,
+        availableYears,
+        monthlyByYear,
         modeCounts,
     };
 }
@@ -103,26 +81,60 @@ function formatDistance(m: number): { value: string; unit: string } {
 
 const CW = 360;
 const CH = 150;
-const PL = 32; // left (y-axis labels)
+const PL = 32;
 const PR = 6;
 const PT = 8;
-const PB = 26; // bottom (x-axis labels)
+const PB = 26;
 const CHART_W = CW - PL - PR;
 const CHART_H = CH - PT - PB;
 
-function WeeklyChart({ data }: { data: WeekBucket[] }) {
-    const maxArea = Math.max(...data.map((d) => d.area), 0.01);
-    const slotW = CHART_W / data.length;
-    const barW = Math.max(slotW * 0.62, 2);
-    const labelEvery = data.length <= 12 ? 1 : data.length <= 26 ? 2 : data.length <= 52 ? 4 : 8;
+function smoothPaths(points: [number, number][], baseline: number): { area: string; line: string } {
+    if (points.length === 0) return { area: "", line: "" };
+
+    let line = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[Math.max(0, i - 1)];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[Math.min(points.length - 1, i + 2)];
+
+        const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+        const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+        const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+        const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+
+        line += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)},${cp2x.toFixed(2)} ${cp2y.toFixed(2)},${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    const area = `${line} L ${last[0].toFixed(2)} ${baseline} L ${first[0].toFixed(2)} ${baseline} Z`;
+
+    return { area, line };
+}
+
+function MonthlyChart({ data }: { data: number[] }) {
+    const maxArea = Math.max(...data, 0.01);
+    const slotW = CHART_W / 12;
+    const baseline = PT + CHART_H;
 
     const toY = (area: number) => PT + CHART_H * (1 - area / maxArea);
 
+    const points: [number, number][] = data.map((area, i) => [PL + i * slotW + slotW / 2, toY(area)]);
+    const { area, line } = smoothPaths(points, baseline);
+
     return (
         <svg viewBox={`0 0 ${CW} ${CH}`} width="100%" class="stats-chart" aria-hidden="true">
-            {/* 50% gridline */}
+            <defs>
+                <linearGradient id="stats-area-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" class="stats-area-grad-top" />
+                    <stop offset="100%" class="stats-area-grad-bottom" />
+                </linearGradient>
+            </defs>
+
+            {/* Gridlines */}
             <line x1={PL} y1={toY(maxArea * 0.5)} x2={CW - PR} y2={toY(maxArea * 0.5)} class="stats-chart-grid" />
-            {/* 100% gridline */}
             <line x1={PL} y1={PT} x2={CW - PR} y2={PT} class="stats-chart-grid" />
 
             {/* Y-axis labels */}
@@ -133,26 +145,25 @@ function WeeklyChart({ data }: { data: WeekBucket[] }) {
                 {(maxArea * 0.5).toFixed(1)}
             </text>
 
-            {/* Bars + x labels */}
-            {data.map((d, i) => {
-                const bh = (d.area / maxArea) * CHART_H;
-                const bx = PL + i * slotW + (slotW - barW) / 2;
-                const by = PT + CHART_H - bh;
-                const lx = PL + i * slotW + slotW / 2;
-                return (
-                    <g key={d.startMs}>
-                        {bh > 0 && <rect x={bx} y={by} width={barW} height={bh} class="stats-chart-bar" rx="2" />}
-                        {i % labelEvery === 0 && (
-                            <text x={lx} y={CH - 4} textAnchor="middle" class="stats-chart-label">
-                                {d.label}
-                            </text>
-                        )}
-                    </g>
-                );
-            })}
+            {/* Area fill + line */}
+            {area && <path d={area} class="stats-chart-area" />}
+            {line && <path d={line} class="stats-chart-line" />}
+
+            {/* X-axis month labels */}
+            {MONTH_LABELS.map((label, i) => (
+                <text
+                    key={label}
+                    x={PL + i * slotW + slotW / 2}
+                    y={CH - 4}
+                    textAnchor="middle"
+                    class="stats-chart-label"
+                >
+                    {label}
+                </text>
+            ))}
 
             {/* Baseline */}
-            <line x1={PL} y1={PT + CHART_H} x2={CW - PR} y2={PT + CHART_H} class="stats-chart-baseline" />
+            <line x1={PL} y1={baseline} x2={CW - PR} y2={baseline} class="stats-chart-baseline" />
         </svg>
     );
 }
@@ -178,10 +189,15 @@ export function StatsView() {
     const [stats, setStats] = useState<StatsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
     useEffect(() => {
         api.getHistoryList()
-            .then((files) => setStats(computeStats(files)))
+            .then((files) => {
+                const s = computeStats(files);
+                setStats(s);
+                if (s.availableYears.length > 0) setSelectedYear(s.availableYears[0]);
+            })
             .catch((e: unknown) => {
                 const msg =
                     e instanceof ResponseParseError
@@ -193,6 +209,7 @@ export function StatsView() {
     }, []);
 
     const dist = stats ? formatDistance(stats.totalDistance) : { value: "0", unit: "m" };
+    const monthlyData = stats?.monthlyByYear[selectedYear] ?? Array(12).fill(0);
 
     return (
         <>
@@ -220,8 +237,24 @@ export function StatsView() {
                         </div>
 
                         <div class="stats-section">
-                            <div class="stats-section-title">Area covered · by week</div>
-                            <WeeklyChart data={stats.weekly} />
+                            <div class="stats-section-header">
+                                <div class="stats-section-title">Area covered · {selectedYear}</div>
+                                {stats.availableYears.length > 1 && (
+                                    <div class="stats-year-picker">
+                                        {stats.availableYears.map((y) => (
+                                            <button
+                                                key={y}
+                                                type="button"
+                                                class={`stats-year-btn${y === selectedYear ? " active" : ""}`}
+                                                onClick={() => setSelectedYear(y)}
+                                            >
+                                                {y}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <MonthlyChart data={monthlyData} />
                             <div class="stats-chart-unit">m²</div>
                         </div>
 
