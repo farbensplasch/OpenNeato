@@ -54,7 +54,7 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
         totalDistance += s.distanceTraveled;
         totalDuration += s.duration;
         const battStart = s.batteryStart ?? f.session?.battery;
-        if (battStart != null && s.batteryEnd != null) {
+        if (battStart != null && s.batteryEnd != null && battStart > s.batteryEnd) {
             batterySum += battStart - s.batteryEnd;
             batteryCount++;
         }
