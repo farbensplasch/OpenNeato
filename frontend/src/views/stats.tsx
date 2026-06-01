@@ -7,7 +7,6 @@ import type { HistoryFileInfo } from "../types";
 import { normalizeError } from "../utils";
 import { formatDuration } from "./history/helpers";
 
-const NUM_WEEKS = 10;
 const MS_WEEK = 7 * 86400 * 1000;
 
 function weekStartMs(epochMs: number): number {
@@ -65,8 +64,14 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
     }
 
     const thisWeek = weekStartMs(Date.now());
-    const weekly: WeekBucket[] = Array.from({ length: NUM_WEEKS }, (_, i) => {
-        const startMs = thisWeek - (NUM_WEEKS - 1 - i) * MS_WEEK;
+    const sessionsWithTime = finished.filter((f) => f.session);
+    const oldestWeek =
+        sessionsWithTime.length > 0
+            ? weekStartMs(Math.min(...sessionsWithTime.map((f) => f.session!.time * 1000)))
+            : thisWeek;
+    const numWeeks = Math.max(1, Math.round((thisWeek - oldestWeek) / MS_WEEK) + 1);
+    const weekly: WeekBucket[] = Array.from({ length: numWeeks }, (_, i) => {
+        const startMs = thisWeek - (numWeeks - 1 - i) * MS_WEEK;
         const d = new Date(startMs);
         return { startMs, label: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`, area: 0 };
     });
@@ -108,7 +113,8 @@ const CHART_H = CH - PT - PB;
 function WeeklyChart({ data }: { data: WeekBucket[] }) {
     const maxArea = Math.max(...data.map((d) => d.area), 0.01);
     const slotW = CHART_W / data.length;
-    const barW = Math.max(slotW * 0.62, 4);
+    const barW = Math.max(slotW * 0.62, 2);
+    const labelEvery = data.length <= 12 ? 1 : data.length <= 26 ? 2 : data.length <= 52 ? 4 : 8;
 
     const toY = (area: number) => PT + CHART_H * (1 - area / maxArea);
 
@@ -136,7 +142,7 @@ function WeeklyChart({ data }: { data: WeekBucket[] }) {
                 return (
                     <g key={d.startMs}>
                         {bh > 0 && <rect x={bx} y={by} width={barW} height={bh} class="stats-chart-bar" rx="2" />}
-                        {i % 2 === 0 && (
+                        {i % labelEvery === 0 && (
                             <text x={lx} y={CH - 4} textAnchor="middle" class="stats-chart-label">
                                 {d.label}
                             </text>
@@ -214,7 +220,7 @@ export function StatsView() {
                         </div>
 
                         <div class="stats-section">
-                            <div class="stats-section-title">Area covered · last 10 weeks</div>
+                            <div class="stats-section-title">Area covered · by week</div>
                             <WeeklyChart data={stats.weekly} />
                             <div class="stats-chart-unit">m²</div>
                         </div>
