@@ -191,7 +191,7 @@ export function StatsView() {
     return (
         <>
             <div class="header">
-                <button type="button" class="header-back-btn" onClick={() => navigate("/")} aria-label="Back">
+                <button type="button" class="header-back-btn" onClick={() => navigate("/history")} aria-label="Back">
                     <Icon svg={backSvg} />
                 </button>
                 <h1>Statistics</h1>
