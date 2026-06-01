@@ -3162,3 +3162,145 @@ input:disabled {
         font-size: 28px;
     }
 }
+
+/* -- Statistics view --------------------------------------------------- */
+
+.stats-page {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+}
+
+.stats-empty {
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
+.stats-totals {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.stats-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+
+.stats-card-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.stats-card-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 4px;
+    line-height: 1.1;
+}
+
+.stats-card-unit {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-dim);
+}
+
+.stats-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+
+.stats-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+}
+
+.stats-chart {
+    display: block;
+    overflow: visible;
+}
+
+.stats-chart-grid {
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.stats-chart-baseline {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+}
+
+.stats-chart-bar {
+    fill: var(--accent);
+    opacity: 0.85;
+}
+
+.stats-chart-label {
+    fill: var(--text-dim);
+    font-size: 9px;
+    font-family: inherit;
+}
+
+.stats-chart-unit {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 4px;
+}
+
+.stats-modes {
+    display: flex;
+    gap: 10px;
+}
+
+.stats-mode-pill {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    background: var(--surface-raised);
+    border-radius: 8px;
+}
+
+.stats-mode-count {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.stats-mode-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.stats-battery-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+}
+
+.stats-battery-row .stats-section-title {
+    margin-bottom: 0;
+}
+
+.stats-battery-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--amber);
+}

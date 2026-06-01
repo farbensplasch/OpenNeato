@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { api, ResponseParseError } from "../api";
 import backSvg from "../assets/icons/back.svg?raw";
+import chartSvg from "../assets/icons/chart.svg?raw";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { ErrorBannerStack, useErrorStack } from "../components/error-banner";
 import { Icon } from "../components/icon";
@@ -167,7 +168,18 @@ export function HistoryView() {
                     <Icon svg={backSvg} />
                 </button>
                 <h1>{showDetail ? "Clean Map" : "Cleaning History"}</h1>
-                <div class="header-right-spacer" />
+                {!showDetail && !listCorrupted ? (
+                    <button
+                        type="button"
+                        class="header-right-btn"
+                        aria-label="Statistics"
+                        onClick={() => navigate("/stats")}
+                    >
+                        <Icon svg={chartSvg} />
+                    </button>
+                ) : (
+                    <div class="header-right-spacer" />
+                )}
             </div>
 
             <ErrorBannerStack errors={errors} />

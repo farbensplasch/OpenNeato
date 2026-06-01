@@ -11,6 +11,7 @@ import { LogsView } from "./views/logs";
 import { ManualView } from "./views/manual";
 import { ScheduleView } from "./views/schedule";
 import { SettingsView } from "./views/settings";
+import { StatsView } from "./views/stats";
 
 type Theme = "system" | "dark" | "light";
 
@@ -181,6 +182,9 @@ export function App() {
             </Route>
             <Route path="/history" prefix>
                 <HistoryView />
+            </Route>
+            <Route path="/stats">
+                <StatsView />
             </Route>
         </Router>
     );
