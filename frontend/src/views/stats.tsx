@@ -9,6 +9,43 @@ import { formatDuration } from "./history/helpers";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+type ChartMetric = "area" | "distance" | "duration" | "cleans";
+
+const METRICS: { key: ChartMetric; label: string }[] = [
+    { key: "area", label: "Area" },
+    { key: "distance", label: "Distance" },
+    { key: "duration", label: "Runtime" },
+    { key: "cleans", label: "Cleans" },
+];
+
+const METRIC_TITLES: Record<ChartMetric, string> = {
+    area: "Area covered",
+    distance: "Distance",
+    duration: "Runtime",
+    cleans: "Cleans",
+};
+
+const METRIC_UNITS: Record<ChartMetric, string> = {
+    area: "m²",
+    distance: "m",
+    duration: "",
+    cleans: "",
+};
+
+interface MonthlyData {
+    area: number[];
+    distance: number[];
+    duration: number[];
+    cleans: number[];
+}
+
+const EMPTY_MONTHLY: MonthlyData = {
+    area: Array(12).fill(0),
+    distance: Array(12).fill(0),
+    duration: Array(12).fill(0),
+    cleans: Array(12).fill(0),
+};
+
 interface StatsData {
     totalCleans: number;
     totalArea: number;
@@ -16,7 +53,7 @@ interface StatsData {
     totalDuration: number;
     avgBatteryUsed: number | null;
     availableYears: number[];
-    monthlyByYear: Record<number, number[]>;
+    monthlyByYear: Record<number, MonthlyData>;
     modeCounts: { house: number; spot: number; manual: number };
 }
 
@@ -29,7 +66,7 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
     let batterySum = 0;
     let batteryCount = 0;
     const modeCounts = { house: 0, spot: 0, manual: 0 };
-    const monthlyByYear: Record<number, number[]> = {};
+    const monthlyByYear: Record<number, MonthlyData> = {};
 
     for (const f of finished) {
         if (!f.summary) continue;
@@ -47,13 +84,21 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
         else if (mode === "spot") modeCounts.spot++;
         else modeCounts.manual++;
 
-        if (f.session) {
-            const d = new Date(f.session.time * 1000);
-            const year = d.getUTCFullYear();
-            const month = d.getUTCMonth();
-            if (!monthlyByYear[year]) monthlyByYear[year] = Array(12).fill(0);
-            monthlyByYear[year][month] += s.areaCovered;
-        }
+        const sessionTime = f.session?.time ?? s.time;
+        const d = new Date(sessionTime * 1000);
+        const year = d.getFullYear();
+        const month = d.getMonth();
+        if (!monthlyByYear[year])
+            monthlyByYear[year] = {
+                area: Array(12).fill(0),
+                distance: Array(12).fill(0),
+                duration: Array(12).fill(0),
+                cleans: Array(12).fill(0),
+            };
+        monthlyByYear[year].area[month] += s.areaCovered;
+        monthlyByYear[year].distance[month] += s.distanceTraveled;
+        monthlyByYear[year].duration[month] += s.duration;
+        monthlyByYear[year].cleans[month]++;
     }
 
     const availableYears = Object.keys(monthlyByYear)
@@ -75,6 +120,35 @@ function computeStats(files: HistoryFileInfo[]): StatsData {
 function formatDistance(m: number): { value: string; unit: string } {
     if (m >= 1000) return { value: (m / 1000).toFixed(1), unit: "km" };
     return { value: m.toFixed(0), unit: "m" };
+}
+
+function metricAxisLabel(val: number, metric: ChartMetric): string {
+    switch (metric) {
+        case "area":
+            return val.toFixed(1);
+        case "distance":
+            return val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val.toFixed(0);
+        case "duration": {
+            const h = Math.floor(val / 3600);
+            const m = Math.floor((val % 3600) / 60);
+            return h > 0 ? `${h}h${m}m` : `${m}m`;
+        }
+        case "cleans":
+            return String(Math.round(val));
+    }
+}
+
+function formatMetricVal(val: number, metric: ChartMetric): string {
+    switch (metric) {
+        case "area":
+            return `${val.toFixed(1)} m²`;
+        case "distance":
+            return val >= 1000 ? `${(val / 1000).toFixed(1)} km` : `${val.toFixed(0)} m`;
+        case "duration":
+            return formatDuration(Math.round(val));
+        case "cleans":
+            return `${Math.round(val)}`;
+    }
 }
 
 // -- Chart ---------------------------------------------------------------
@@ -100,9 +174,9 @@ function smoothPaths(points: [number, number][], baseline: number): { area: stri
         const p3 = points[Math.min(points.length - 1, i + 2)];
 
         const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-        const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+        const cp1y = Math.max(PT, Math.min(baseline, p1[1] + (p2[1] - p0[1]) / 6));
         const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-        const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+        const cp2y = Math.max(PT, Math.min(baseline, p2[1] - (p3[1] - p1[1]) / 6));
 
         line += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)},${cp2x.toFixed(2)} ${cp2y.toFixed(2)},${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
     }
@@ -114,15 +188,36 @@ function smoothPaths(points: [number, number][], baseline: number): { area: stri
     return { area, line };
 }
 
-function MonthlyChart({ data }: { data: number[] }) {
-    const maxArea = Math.max(...data, 0.01);
+function MonthlyChart({
+    data,
+    metric,
+    selectedMonth,
+    onSelectMonth,
+}: {
+    data: number[];
+    metric: ChartMetric;
+    selectedMonth: number | null;
+    onSelectMonth: (m: number | null) => void;
+}) {
+    const maxVal = Math.max(...data, 0.01);
     const slotW = CHART_W / 12;
     const baseline = PT + CHART_H;
-
-    const toY = (area: number) => PT + CHART_H * (1 - area / maxArea);
-
-    const points: [number, number][] = data.map((area, i) => [PL + i * slotW + slotW / 2, toY(area)]);
+    const toY = (v: number) => PT + CHART_H * (1 - v / maxVal);
+    const points: [number, number][] = data.map((v, i) => [PL + i * slotW + slotW / 2, toY(v)]);
     const { area, line } = smoothPaths(points, baseline);
+
+    const tooltip =
+        selectedMonth !== null
+            ? (() => {
+                  const x = points[selectedMonth][0];
+                  const y = points[selectedMonth][1];
+                  const label = `${MONTH_LABELS[selectedMonth]}: ${formatMetricVal(data[selectedMonth], metric)}`;
+                  const tw = label.length * 5.2 + 10;
+                  const tx = Math.max(PL + 2, Math.min(CW - PR - tw - 2, x - tw / 2));
+                  const ty = Math.max(PT + 12, y - 10);
+                  return { x, y, label, tw, tx, ty };
+              })()
+            : null;
 
     return (
         <svg viewBox={`0 0 ${CW} ${CH}`} width="100%" class="stats-chart" aria-hidden="true">
@@ -134,20 +229,25 @@ function MonthlyChart({ data }: { data: number[] }) {
             </defs>
 
             {/* Gridlines */}
-            <line x1={PL} y1={toY(maxArea * 0.5)} x2={CW - PR} y2={toY(maxArea * 0.5)} class="stats-chart-grid" />
+            <line x1={PL} y1={toY(maxVal * 0.5)} x2={CW - PR} y2={toY(maxVal * 0.5)} class="stats-chart-grid" />
             <line x1={PL} y1={PT} x2={CW - PR} y2={PT} class="stats-chart-grid" />
 
             {/* Y-axis labels */}
             <text x={PL - 4} y={PT + 4} textAnchor="end" class="stats-chart-label">
-                {maxArea.toFixed(1)}
+                {metricAxisLabel(maxVal, metric)}
             </text>
-            <text x={PL - 4} y={toY(maxArea * 0.5) + 4} textAnchor="end" class="stats-chart-label">
-                {(maxArea * 0.5).toFixed(1)}
+            <text x={PL - 4} y={toY(maxVal * 0.5) + 4} textAnchor="end" class="stats-chart-label">
+                {metricAxisLabel(maxVal * 0.5, metric)}
             </text>
 
             {/* Area fill + line */}
             {area && <path d={area} class="stats-chart-area" />}
             {line && <path d={line} class="stats-chart-line" />}
+
+            {/* Selected month vertical line */}
+            {tooltip && (
+                <line x1={tooltip.x} y1={PT} x2={tooltip.x} y2={baseline} class="stats-chart-selector" />
+            )}
 
             {/* X-axis month labels */}
             {MONTH_LABELS.map((label, i) => (
@@ -156,7 +256,7 @@ function MonthlyChart({ data }: { data: number[] }) {
                     x={PL + i * slotW + slotW / 2}
                     y={CH - 4}
                     textAnchor="middle"
-                    class="stats-chart-label"
+                    class={`stats-chart-label${i === selectedMonth ? " stats-chart-label-sel" : ""}`}
                 >
                     {label}
                 </text>
@@ -164,6 +264,43 @@ function MonthlyChart({ data }: { data: number[] }) {
 
             {/* Baseline */}
             <line x1={PL} y1={baseline} x2={CW - PR} y2={baseline} class="stats-chart-baseline" />
+
+            {/* Click zones */}
+            {MONTH_LABELS.map((_, i) => (
+                <rect
+                    key={i}
+                    x={PL + i * slotW}
+                    y={PT}
+                    width={slotW}
+                    height={CHART_H + PB}
+                    fill="transparent"
+                    style="cursor:pointer"
+                    onClick={() => onSelectMonth(i === selectedMonth ? null : i)}
+                />
+            ))}
+
+            {/* Tooltip (rendered last so it sits on top) */}
+            {tooltip && (
+                <g style="pointer-events:none">
+                    <circle cx={tooltip.x} cy={tooltip.y} r={3} class="stats-chart-dot" />
+                    <rect
+                        x={tooltip.tx - 2}
+                        y={tooltip.ty - 10}
+                        width={tooltip.tw}
+                        height={14}
+                        rx={3}
+                        class="stats-chart-tooltip-bg"
+                    />
+                    <text
+                        x={tooltip.tx + tooltip.tw / 2}
+                        y={tooltip.ty}
+                        textAnchor="middle"
+                        class="stats-chart-tooltip-text"
+                    >
+                        {tooltip.label}
+                    </text>
+                </g>
+            )}
         </svg>
     );
 }
@@ -190,6 +327,8 @@ export function StatsView() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [selectedMetric, setSelectedMetric] = useState<ChartMetric>("area");
+    const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
     useEffect(() => {
         api.getHistoryList()
@@ -209,7 +348,8 @@ export function StatsView() {
     }, []);
 
     const dist = stats ? formatDistance(stats.totalDistance) : { value: "0", unit: "m" };
-    const monthlyData = stats?.monthlyByYear[selectedYear] ?? Array(12).fill(0);
+    const monthlyData = stats?.monthlyByYear[selectedYear] ?? EMPTY_MONTHLY;
+    const unit = METRIC_UNITS[selectedMetric];
 
     return (
         <>
@@ -238,24 +378,54 @@ export function StatsView() {
 
                         <div class="stats-section">
                             <div class="stats-section-header">
-                                <div class="stats-section-title">Area covered · {selectedYear}</div>
-                                {stats.availableYears.length > 1 && (
-                                    <div class="stats-year-picker">
-                                        {stats.availableYears.map((y) => (
+                                <div class="stats-section-title">
+                                    {METRIC_TITLES[selectedMetric]} · {selectedYear}
+                                </div>
+                                {stats.availableYears.length > 1 && (() => {
+                                    const idx = stats.availableYears.indexOf(selectedYear);
+                                    return (
+                                        <div class="stats-year-nav">
                                             <button
-                                                key={y}
                                                 type="button"
-                                                class={`stats-year-btn${y === selectedYear ? " active" : ""}`}
-                                                onClick={() => setSelectedYear(y)}
+                                                class="stats-year-nav-btn"
+                                                disabled={idx >= stats.availableYears.length - 1}
+                                                onClick={() => setSelectedYear(stats.availableYears[idx + 1])}
+                                                aria-label="Previous year"
                                             >
-                                                {y}
+                                                ‹
                                             </button>
-                                        ))}
-                                    </div>
-                                )}
+                                            <button
+                                                type="button"
+                                                class="stats-year-nav-btn"
+                                                disabled={idx <= 0}
+                                                onClick={() => setSelectedYear(stats.availableYears[idx - 1])}
+                                                aria-label="Next year"
+                                            >
+                                                ›
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
                             </div>
-                            <MonthlyChart data={monthlyData} />
-                            <div class="stats-chart-unit">m²</div>
+                            <div class="stats-metric-picker">
+                                {METRICS.map(({ key, label }) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        class={`stats-metric-btn${key === selectedMetric ? " active" : ""}`}
+                                        onClick={() => setSelectedMetric(key)}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <MonthlyChart
+                                data={monthlyData[selectedMetric]}
+                                metric={selectedMetric}
+                                selectedMonth={selectedMonth}
+                                onSelectMonth={setSelectedMonth}
+                            />
+                            {unit && <div class="stats-chart-unit">{unit}</div>}
                         </div>
 
                         <div class="stats-section">

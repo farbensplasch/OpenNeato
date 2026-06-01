@@ -3312,6 +3312,80 @@ input:disabled {
     font-family: inherit;
 }
 
+.stats-chart-label-sel {
+    fill: var(--accent);
+}
+
+.stats-chart-selector {
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0.6;
+}
+
+.stats-chart-dot {
+    fill: var(--accent);
+    stroke: var(--surface);
+    stroke-width: 1.5;
+}
+
+.stats-chart-tooltip-bg {
+    fill: var(--surface-raised);
+    stroke: var(--border);
+    stroke-width: 0.5;
+}
+
+.stats-chart-tooltip-text {
+    fill: var(--text);
+    font-size: 9px;
+    font-family: inherit;
+}
+
+.stats-metric-picker {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.stats-metric-btn {
+    flex: 1;
+    padding: 4px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.stats-metric-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.stats-year-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.stats-year-nav-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+}
+
+.stats-year-nav-btn:disabled {
+    color: var(--border);
+    cursor: default;
+}
+
 .stats-chart-unit {
     font-size: 11px;
     color: var(--text-muted);
