@@ -245,9 +245,7 @@ function MonthlyChart({
             {line && <path d={line} class="stats-chart-line" />}
 
             {/* Selected month vertical line */}
-            {tooltip && (
-                <line x1={tooltip.x} y1={PT} x2={tooltip.x} y2={baseline} class="stats-chart-selector" />
-            )}
+            {tooltip && <line x1={tooltip.x} y1={PT} x2={tooltip.x} y2={baseline} class="stats-chart-selector" />}
 
             {/* X-axis month labels */}
             {MONTH_LABELS.map((label, i) => (
@@ -265,8 +263,9 @@ function MonthlyChart({
             {/* Baseline */}
             <line x1={PL} y1={baseline} x2={CW - PR} y2={baseline} class="stats-chart-baseline" />
 
-            {/* Click zones */}
+            {/* Click zones — SVG is aria-hidden so no role needed */}
             {MONTH_LABELS.map((_, i) => (
+                // biome-ignore lint/a11y/noStaticElementInteractions: chart is aria-hidden
                 <rect
                     key={i}
                     x={PL + i * slotW}
@@ -381,31 +380,32 @@ export function StatsView() {
                                 <div class="stats-section-title">
                                     {METRIC_TITLES[selectedMetric]} · {selectedYear}
                                 </div>
-                                {stats.availableYears.length > 1 && (() => {
-                                    const idx = stats.availableYears.indexOf(selectedYear);
-                                    return (
-                                        <div class="stats-year-nav">
-                                            <button
-                                                type="button"
-                                                class="stats-year-nav-btn"
-                                                disabled={idx >= stats.availableYears.length - 1}
-                                                onClick={() => setSelectedYear(stats.availableYears[idx + 1])}
-                                                aria-label="Previous year"
-                                            >
-                                                ‹
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="stats-year-nav-btn"
-                                                disabled={idx <= 0}
-                                                onClick={() => setSelectedYear(stats.availableYears[idx - 1])}
-                                                aria-label="Next year"
-                                            >
-                                                ›
-                                            </button>
-                                        </div>
-                                    );
-                                })()}
+                                {stats.availableYears.length > 1 &&
+                                    (() => {
+                                        const idx = stats.availableYears.indexOf(selectedYear);
+                                        return (
+                                            <div class="stats-year-nav">
+                                                <button
+                                                    type="button"
+                                                    class="stats-year-nav-btn"
+                                                    disabled={idx >= stats.availableYears.length - 1}
+                                                    onClick={() => setSelectedYear(stats.availableYears[idx + 1])}
+                                                    aria-label="Previous year"
+                                                >
+                                                    ‹
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="stats-year-nav-btn"
+                                                    disabled={idx <= 0}
+                                                    onClick={() => setSelectedYear(stats.availableYears[idx - 1])}
+                                                    aria-label="Next year"
+                                                >
+                                                    ›
+                                                </button>
+                                            </div>
+                                        );
+                                    })()}
                             </div>
                             <div class="stats-metric-picker">
                                 {METRICS.map(({ key, label }) => (
