@@ -3297,7 +3297,9 @@ input:disabled {
     font-size: 11px;
     font-family: inherit;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition:
+        background 0.15s,
+        color 0.15s;
 }
 
 .stats-year-btn.active {
@@ -3357,7 +3359,10 @@ input:disabled {
     font-size: 11px;
     font-family: inherit;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    transition:
+        background 0.15s,
+        color 0.15s,
+        border-color 0.15s;
 }
 
 .stats-metric-btn.active {
